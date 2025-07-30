@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary, output as 'app' (adjust main package if needed)
-RUN go build -o app .
+RUN go build -o app ./cmd/main.go
 
 # Final stage: minimal runtime image
 FROM alpine:latest
@@ -28,7 +28,7 @@ WORKDIR /app
 COPY --from=builder /app/app .
 
 # Expose the port your API listens on (change if needed)
-EXPOSE 8080
+EXPOSE 3000
 
 # Run the binary
 CMD ["./app"]

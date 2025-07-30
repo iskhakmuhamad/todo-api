@@ -15,34 +15,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Build Docker image
-      run: |
-        docker build -t todo-api:latest .
+      - name: Build Docker image
+        run: |
+          docker build -t todo-api:latest .
 
-    - name: Save Docker image as tar
-      run: |
-        docker save todo-api:latest -o todo-api.tar
+      - name: Save Docker image as tarball
+        run: |
+          docker save todo-api:latest -o todo-api.tar
 
-    - name: Setup SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "$SSH_KEY" > ~/.ssh/id_ed25519
-        chmod 600 ~/.ssh/id_ed25519
-        ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
-    - name: Copy Docker image to VPS
-      run: |
-        scp -i ~/.ssh/id_ed25519 todo-api.tar $SSH_USER@$VPS_HOST:~/todo-api.tar
+      - name: Upload Docker image to VPS
+        run: |
+          scp -i ~/.ssh/id_ed25519 todo-api.tar $SSH_USER@$VPS_HOST:~/todo-api.tar
 
-    - name: Load and Run Docker container on VPS
-      run: |
-        ssh -i ~/.ssh/id_ed25519 $SSH_USER@$VPS_HOST << 'EOF'
-          docker load -i ~/todo-api.tar
-          docker stop todo-api || true
-          docker rm todo-api || true
-          docker run -d --name todo-api -p 8080:8080 todo-api:latest
-          rm ~/todo-api.tar
-        EOF
+      - name: Upload .env file to VPS
+        run: |
+          echo "$DOTENV_CONTENT" > .env
+          scp -i ~/.ssh/id_ed25519 .env $SSH_USER@$VPS_HOST:~/todo-api/.env
+        env:
+          DOTENV_CONTENT: ${{ secrets.DOTENV_CONTENT }}
+
+      - name: Deploy Docker container on VPS
+        run: |
+          ssh -i ~/.ssh/id_ed25519 $SSH_USER@$VPS_HOST << 'EOF'
+            docker load -i ~/todo-api.tar
+            docker stop todo-api || true
+            docker rm todo-api || true
+            docker run -d --name todo-api -p 3000:3000 --env-file ~/todo-api/.env todo-api:latest
+            rm ~/todo-api.tar
+          EOF
