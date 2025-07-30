@@ -1,33 +1,48 @@
-name: Auto Deploy to VPS
+name: Build and Deploy Docker to VPS
 
 on:
   push:
     branches:
       - master
 
+env:
+  VPS_HOST: ${{ secrets.VPS_HOST }}
+  SSH_USER: deployer
+  SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Set up SSH
+    - name: Build Docker image
+      run: |
+        docker build -t todo-api:latest .
+
+    - name: Save Docker image as tar
+      run: |
+        docker save todo-api:latest -o todo-api.tar
+
+    - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+        echo "$SSH_KEY" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
-        ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+        ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
-    - name: Deploy to VPS
+    - name: Copy Docker image to VPS
+      run: |
+        scp -i ~/.ssh/id_ed25519 todo-api.tar $SSH_USER@$VPS_HOST:~/todo-api.tar
+
+    - name: Load and Run Docker container on VPS
       run: |
         ssh -i ~/.ssh/id_ed25519 $SSH_USER@$VPS_HOST << 'EOF'
-          cd ~/todo-api || { echo "Directory not found"; exit 1; }
-          git pull origin master || { echo "Git pull failed"; exit 1; }
-          go build -o app ./cmd/main.go || { echo "Build failed"; exit 1; }
-          pkill app || true
-          nohup ./app > app.log 2>&1 &
-          echo "✅ Deployment succeeded!"
+          docker load -i ~/todo-api.tar
+          docker stop todo-api || true
+          docker rm todo-api || true
+          docker run -d --name todo-api -p 8080:8080 todo-api:latest
+          rm ~/todo-api.tar
         EOF
-
