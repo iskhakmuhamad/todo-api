@@ -22,10 +22,12 @@ jobs:
 
     - name: Deploy to VPS
       run: |
-        ssh -i ~/.ssh/id_ed25519 deployer@${{ secrets.VPS_HOST }} << 'EOF'
-          cd ~/todo-api
-          git pull origin master
-          go build -o app ./cmd/main.go
+        ssh -i ~/.ssh/id_ed25519 $SSH_USER@$VPS_HOST << 'EOF'
+          cd ~/todo-api || { echo "Directory not found"; exit 1; }
+          git pull origin master || { echo "Git pull failed"; exit 1; }
+          go build -o app ./cmd/main.go || { echo "Build failed"; exit 1; }
           pkill app || true
           nohup ./app > app.log 2>&1 &
+          echo "✅ Deployment succeeded!"
         EOF
+
